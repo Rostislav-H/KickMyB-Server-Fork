@@ -56,6 +56,14 @@ public class ControllerTask {
         MUser user = currentUser();
         return serviceTask.detail(id, user);
     }
+    @DeleteMapping("/api/delete/{taskId}")
+    public @ResponseBody String deleteTask(@PathVariable Long taskId) {
+        System.out.println("KICKB SERVER : Delete task with ID " + taskId);
+        ConfigHTTP.attenteArticifielle();
+        MUser user = currentUser();
+        serviceTask.deleteTask(taskId, user);
+        return "Task deleted successfully";
+    }
 
     /**
      * Accède au Principal stocké dans la mémoire vivre (HttpSession)
