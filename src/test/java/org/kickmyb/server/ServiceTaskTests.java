@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.kickmyb.server.account.MUser;
 import org.kickmyb.server.account.MUserRepository;
+import org.kickmyb.server.task.MTask;
+import org.kickmyb.server.task.MTaskRepository;
 import org.kickmyb.server.task.ServiceTask;
 import org.kickmyb.transfer.AddTaskRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +20,7 @@ import org.springframework.test.context.junit4.SpringRunner;
 import java.util.Date;
 
 import static org.assertj.core.api.Fail.fail;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 
 // TODO pour celui ci on aimerait pouvoir mocker l'utilisateur pour ne pas avoir à le créer
 
@@ -35,7 +37,8 @@ class ServiceTaskTests {
     private MUserRepository userRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
-
+    @Autowired
+    private MTaskRepository taskRepository;
     @Autowired
     private ServiceTask serviceTask;
 
@@ -111,5 +114,78 @@ class ServiceTaskTests {
         } catch (Exception e) {
             assertEquals(ServiceTask.Existing.class, e.getClass());
         }
+    }
+    @Test
+    void testDeleteTaskWithCorrectId() {
+
+        MUser user = new MUser();
+        user.username = "Alice";
+        userRepository.saveAndFlush(user);
+
+
+        MTask task = new MTask();
+        task.name = "Task 1";
+        taskRepository.saveAndFlush(task);
+        user.tasks.add(task);
+        userRepository.saveAndFlush(user);
+
+
+        MUser fetchedUser = userRepository.findById(user.id).get();
+        assertEquals(1, fetchedUser.tasks.size());
+
+
+        serviceTask.deleteTask(task.id, fetchedUser);
+
+
+        MUser updatedUser = userRepository.findById(user.id).get();
+        assertTrue(updatedUser.tasks.isEmpty());
+        assertFalse(taskRepository.findById(task.id).isPresent());
+    }
+
+    @Test
+    void testDeleteTaskWithIncorrectId() {
+
+        MUser user = new MUser();
+        user.username = "Alice";
+        userRepository.saveAndFlush(user);
+
+
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> {
+            serviceTask.deleteTask(999L, user);
+        });
+
+
+        assertEquals("Task not found", exception.getMessage());
+    }
+
+    @Test
+    void testAccessControlForTaskDeletion() {
+        // Creation de Alice
+        MUser alice = new MUser();
+        alice.username = "Alice";
+        userRepository.saveAndFlush(alice);
+
+        MTask task = new MTask();
+        task.name = "Task 1";
+        taskRepository.saveAndFlush(task);
+        alice.tasks.add(task);
+        userRepository.saveAndFlush(alice);
+
+        // reprendre la tâche persistante
+        MUser fetchedAlice = userRepository.findById(alice.id).get();
+        assertEquals(1, fetchedAlice.tasks.size());
+
+        // Creation de bob
+        MUser bob = new MUser();
+        bob.username = "Bob";
+        userRepository.saveAndFlush(bob);
+
+        // Essayer de supprimer la tâche de Alice avec Bob
+        Exception exception = assertThrows(SecurityException.class, () -> {
+            serviceTask.deleteTask(task.id, bob);
+        });
+
+        // Verification du message
+        assertEquals("User does not own this task", exception.getMessage());
     }
 }
